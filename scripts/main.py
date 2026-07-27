@@ -22,7 +22,6 @@ CONSOLE_URL_TEMPLATE = "https://wispbyte.com/client/servers/{identifier}/console
 REWARD_VIDEO_URL = "https://wispbyte.com/client/reward-video"
 
 WORKSPACE = os.environ.get("GITHUB_WORKSPACE", str(Path.cwd()))
-OUTPUT_DIR = Path(WORKSPACE) / "output/screenshots"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 logging.basicConfig(
@@ -65,26 +64,6 @@ def log(msg: str, level: str = "INFO"):
     logger.info(f"{prefix} {msg}")
 
 
-def send_tg_photo(token: str, chat_id: str, photo_path: str, caption: str):
-    if not token or not chat_id:
-        return
-    if not photo_path or not os.path.exists(photo_path):
-        log(f"截图文件不存在: {photo_path}", "WARN")
-        return
-    url = f"https://api.telegram.org/bot{token}/sendPhoto"
-    try:
-        with open(photo_path, "rb") as f:
-            resp = requests.post(
-                url,
-                data={"chat_id": chat_id, "caption": caption},
-                files={"photo": f},
-                timeout=30
-            )
-        resp.raise_for_status()
-        log("Telegram 图片通知发送成功")
-    except Exception as e:
-        log(f"Telegram 通知异常: {e}", "ERROR")
-
 
 def restart_warp():
     log("正在重启 WARP 以更换 IP...")
@@ -116,17 +95,6 @@ def restart_warp():
         return False
 
 
-def take_screenshot(sb, account_index: int, suffix: str) -> str:
-    timestamp = datetime.now().strftime("%H%M%S")
-    filename = f"acc{account_index}-{suffix}-{timestamp}.png"
-    filepath = str(OUTPUT_DIR / filename)
-    try:
-        sb.save_screenshot(filepath)
-        log(f"📸 截图保存: {filepath}")
-        return filepath
-    except Exception as e:
-        log(f"截图失败: {e}", "WARN")
-        return ""
 
 
 # ====================== 广告弹窗 CSS 屏蔽 ======================
@@ -908,22 +876,15 @@ def process_account(idx: int, email: str, password: str, tg_token: str, tg_chat:
             chromium_arg="--disable-blink-features=AutomationControlled") as sb:
         try:
             if not login(sb, email, password):
-                screenshot = take_screenshot(sb, idx, "login-fail")
-                send_tg_photo(tg_token, tg_chat,
-                              f"❌ 登录失败\n账号: {mask_email(email)}\n\nWispbyte Auto Restart")
                 return
 
             servers = get_servers(sb)
             if not servers:
-                screenshot = take_screenshot(sb, idx, "no-server")
-                send_tg_photo(tg_token, tg_chat,
-                              f"❌ 未找到服务器\n账号: {mask_email(email)}\n\nWispbyte Auto Restart")
                 return
 
             for si, server_id in enumerate(servers, start=1):
                 success = restart_server(sb, server_id)
                 suffix = f"done-{si}" if len(servers) > 1 else "done"
-                screenshot = take_screenshot(sb, idx, suffix)
                 status_icon = "✅" if success else "❌"
                 status_text = "重启成功" if success else "重启失败"
                 caption = (
@@ -932,13 +893,9 @@ def process_account(idx: int, email: str, password: str, tg_token: str, tg_chat:
                     f"服务器: {server_id}\n\n"
                     f"Wispbyte Auto Restart"
                 )
-                send_tg_photo(tg_token, tg_chat, caption)
 
         except Exception as e:
             log(f"账号 {idx} 处理异常: {e}", "ERROR")
-            screenshot = take_screenshot(sb, idx, "exception")
-            send_tg_photo(tg_token, tg_chat,
-                          f"❌ 脚本异常\n账号: {mask_email(email)}\n信息: {str(e)[:200]}\n\nWispbyte Auto Restart")
 
 
 # ====================== 账号加载 ======================
