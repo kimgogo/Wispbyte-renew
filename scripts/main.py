@@ -65,27 +65,6 @@ def log(msg: str, level: str = "INFO"):
     logger.info(f"{prefix} {msg}")
 
 
-def send_tg_photo(token: str, chat_id: str, photo_path: str, caption: str):
-    if not token or not chat_id:
-        return
-    if not photo_path or not os.path.exists(photo_path):
-        log(f"截图文件不存在: {photo_path}", "WARN")
-        return
-    url = f"https://api.telegram.org/bot{token}/sendPhoto"
-    try:
-        with open(photo_path, "rb") as f:
-            resp = requests.post(
-                url,
-                data={"chat_id": chat_id, "caption": caption},
-                files={"photo": f},
-                timeout=30
-            )
-        resp.raise_for_status()
-        log("Telegram 图片通知发送成功")
-    except Exception as e:
-        log(f"Telegram 通知异常: {e}", "ERROR")
-
-
 def restart_warp():
     log("正在重启 WARP 以更换 IP...")
     try:
@@ -932,7 +911,6 @@ def process_account(idx: int, email: str, password: str, tg_token: str, tg_chat:
                     f"服务器: {server_id}\n\n"
                     f"Wispbyte Auto Restart"
                 )
-                send_tg_photo(tg_token, tg_chat, screenshot, caption)
 
         except Exception as e:
             log(f"账号 {idx} 处理异常: {e}", "ERROR")
