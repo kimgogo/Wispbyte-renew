@@ -22,7 +22,6 @@ CONSOLE_URL_TEMPLATE = "https://wispbyte.com/client/servers/{identifier}/console
 REWARD_VIDEO_URL = "https://wispbyte.com/client/reward-video"
 
 WORKSPACE = os.environ.get("GITHUB_WORKSPACE", str(Path.cwd()))
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -64,7 +63,6 @@ def log(msg: str, level: str = "INFO"):
     logger.info(f"{prefix} {msg}")
 
 
-
 def restart_warp():
     log("正在重启 WARP 以更换 IP...")
     try:
@@ -93,8 +91,6 @@ def restart_warp():
     except Exception as e:
         log(f"WARP 重连失败: {e}", "ERROR")
         return False
-
-
 
 
 # ====================== 广告弹窗 CSS 屏蔽 ======================
@@ -865,7 +861,7 @@ def restart_server(sb, identifier: str) -> bool:
 
 
 # ====================== 账号处理 ======================
-def process_account(idx: int, email: str, password: str, tg_token: str, tg_chat: str):
+def process_account(idx: int, email: str, password: str):
     log(f"{'='*50}")
     log(f"开始处理账号 {idx} | {mask_email(email)}")
     log(f"{'='*50}")
@@ -876,23 +872,19 @@ def process_account(idx: int, email: str, password: str, tg_token: str, tg_chat:
             chromium_arg="--disable-blink-features=AutomationControlled") as sb:
         try:
             if not login(sb, email, password):
+                log(f"❌ 登录失败，账号: {mask_email(email)}")
                 return
 
             servers = get_servers(sb)
             if not servers:
+                log(f"❌ 未找到服务器，账号: {mask_email(email)}")
                 return
 
             for si, server_id in enumerate(servers, start=1):
                 success = restart_server(sb, server_id)
-                suffix = f"done-{si}" if len(servers) > 1 else "done"
                 status_icon = "✅" if success else "❌"
                 status_text = "重启成功" if success else "重启失败"
-                caption = (
-                    f"{status_icon} {status_text}\n\n"
-                    f"账号: {mask_email(email)}\n"
-                    f"服务器: {server_id}\n\n"
-                    f"Wispbyte Auto Restart"
-                )
+                log(f"{status_icon} {status_text} 账号 {mask_email(email)} 服务器 {server_id}")
 
         except Exception as e:
             log(f"账号 {idx} 处理异常: {e}", "ERROR")
@@ -941,11 +933,6 @@ def parse_target_emails(raw: str) -> List[str]:
 
 # ====================== 入口 ======================
 def main():
-    tg_token = os.environ.get("TG_BOT_TOKEN", "").strip()
-    tg_chat = os.environ.get("TG_CHAT_ID", "").strip()
-    if not tg_token or not tg_chat:
-        log("缺少 TG_BOT_TOKEN 或 TG_CHAT_ID，通知功能将不可用", "WARN")
-
     all_accounts = load_accounts()
     if not all_accounts:
         log("未找到任何有效账号，请检查 Secrets 设置", "ERROR")
@@ -977,7 +964,7 @@ def main():
     for run_order, (idx, email, password) in enumerate(selected):
         if run_order > 0:
             restart_warp()
-        process_account(idx, email, password, tg_token, tg_chat)
+        process_account(idx, email, password)
         if run_order < len(selected) - 1:
             time.sleep(5)
 
