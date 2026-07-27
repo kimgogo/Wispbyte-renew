@@ -21,8 +21,6 @@ DASHBOARD_URL = "https://wispbyte.com/client/dashboard"
 CONSOLE_URL_TEMPLATE = "https://wispbyte.com/client/servers/{identifier}/console"
 REWARD_VIDEO_URL = "https://wispbyte.com/client/reward-video"
 
-WORKSPACE = os.environ.get("GITHUB_WORKSPACE", str(Path.cwd()))
-
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -61,6 +59,24 @@ def mask_server_id(identifier: str) -> str:
 def log(msg: str, level: str = "INFO"):
     prefix = {"INFO": "[INFO]", "WARN": "[WARN]", "ERROR": "[ERROR]"}.get(level, "[INFO]")
     logger.info(f"{prefix} {msg}")
+
+
+def send_tg_message(token: str, chat_id: str, text: str):
+    """通过 Telegram Bot 发送纯文本消息"""
+    if not token or not chat_id:
+        log("Telegram 令牌或聊天ID未配置，跳过发送", "WARN")
+        return
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    try:
+        resp = requests.post(
+            url,
+            data={"chat_id": chat_id, "text": text, "parse_mode": "HTML"},
+            timeout=30
+        )
+        resp.raise_for_status()
+        log("Telegram 文本通知发送成功")
+    except Exception as e:
+        log(f"Telegram 通知异常: {e}", "ERROR")
 
 
 def restart_warp():
@@ -861,7 +877,7 @@ def restart_server(sb, identifier: str) -> bool:
 
 
 # ====================== 账号处理 ======================
-def process_account(idx: int, email: str, password: str):
+def process_account(idx: int, email: str, password: str, tg_token: str, tg_chat: str):
     log(f"{'='*50}")
     log(f"开始处理账号 {idx} | {mask_email(email)}")
     log(f"{'='*50}")
@@ -872,22 +888,32 @@ def process_account(idx: int, email: str, password: str):
             chromium_arg="--disable-blink-features=AutomationControlled") as sb:
         try:
             if not login(sb, email, password):
-                log(f"❌ 登录失败，账号: {mask_email(email)}")
+                msg = f"❌ 登录失败\n账号: {mask_email(email)}\n\nWispbyte Auto Restart"
+                send_tg_message(tg_token, tg_chat, msg)
                 return
 
             servers = get_servers(sb)
             if not servers:
-                log(f"❌ 未找到服务器，账号: {mask_email(email)}")
+                msg = f"❌ 未找到服务器\n账号: {mask_email(email)}\n\nWispbyte Auto Restart"
+                send_tg_message(tg_token, tg_chat, msg)
                 return
 
             for si, server_id in enumerate(servers, start=1):
                 success = restart_server(sb, server_id)
                 status_icon = "✅" if success else "❌"
                 status_text = "重启成功" if success else "重启失败"
-                log(f"{status_icon} {status_text} 账号 {mask_email(email)} 服务器 {server_id}")
+                msg = (
+                    f"{status_icon} {status_text}\n\n"
+                    f"账号: {mask_email(email)}\n"
+                    f"服务器: {server_id}\n\n"
+                    f"Wispbyte Auto Restart"
+                )
+                send_tg_message(tg_token, tg_chat, msg)
 
         except Exception as e:
             log(f"账号 {idx} 处理异常: {e}", "ERROR")
+            msg = f"❌ 脚本异常\n账号: {mask_email(email)}\n信息: {str(e)[:200]}\n\nWispbyte Auto Restart"
+            send_tg_message(tg_token, tg_chat, msg)
 
 
 # ====================== 账号加载 ======================
@@ -933,6 +959,11 @@ def parse_target_emails(raw: str) -> List[str]:
 
 # ====================== 入口 ======================
 def main():
+    tg_token = os.environ.get("TG_BOT_TOKEN", "").strip()
+    tg_chat = os.environ.get("TG_CHAT_ID", "").strip()
+    if not tg_token or not tg_chat:
+        log("缺少 TG_BOT_TOKEN 或 TG_CHAT_ID，通知功能将不可用", "WARN")
+
     all_accounts = load_accounts()
     if not all_accounts:
         log("未找到任何有效账号，请检查 Secrets 设置", "ERROR")
@@ -964,7 +995,7 @@ def main():
     for run_order, (idx, email, password) in enumerate(selected):
         if run_order > 0:
             restart_warp()
-        process_account(idx, email, password)
+        process_account(idx, email, password, tg_token, tg_chat)
         if run_order < len(selected) - 1:
             time.sleep(5)
 
