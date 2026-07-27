@@ -7,6 +7,7 @@ import json
 import logging
 import tempfile
 import subprocess
+from pathlib import Path
 from datetime import datetime
 from typing import List, Tuple, Optional
 
@@ -19,6 +20,10 @@ LOGIN_URL = "https://wispbyte.com/client"
 DASHBOARD_URL = "https://wispbyte.com/client/dashboard"
 CONSOLE_URL_TEMPLATE = "https://wispbyte.com/client/servers/{identifier}/console"
 REWARD_VIDEO_URL = "https://wispbyte.com/client/reward-video"
+
+WORKSPACE = os.environ.get("GITHUB_WORKSPACE", str(Path.cwd()))
+OUTPUT_DIR = Path(WORKSPACE) / "output/screenshots"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -60,20 +65,19 @@ def log(msg: str, level: str = "INFO"):
     logger.info(f"{prefix} {msg}")
 
 
-def send_tg_message(token: str, chat_id: str, text: str):
-    """通过 Telegram Bot 发送纯文本消息"""
+def send_tg_photo(token: str, chat_id: str, photo_path: str, caption: str):
+    """发送纯文本消息（忽略 photo_path，保留参数兼容性）"""
     if not token or not chat_id:
-        log("Telegram 令牌或聊天ID未配置，跳过发送", "WARN")
         return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
         resp = requests.post(
             url,
-            data={"chat_id": chat_id, "text": text, "parse_mode": "HTML"},
+            data={"chat_id": chat_id, "text": caption},
             timeout=30
         )
         resp.raise_for_status()
-        log("Telegram 文本通知发送成功")
+        log("Telegram 通知发送成功")
     except Exception as e:
         log(f"Telegram 通知异常: {e}", "ERROR")
 
@@ -887,32 +891,32 @@ def process_account(idx: int, email: str, password: str, tg_token: str, tg_chat:
             chromium_arg="--disable-blink-features=AutomationControlled") as sb:
         try:
             if not login(sb, email, password):
-                msg = f"❌ 登录失败\n账号: {mask_email(email)}\n\nWispbyte Auto Restart"
-                send_tg_message(tg_token, tg_chat, msg)
+                send_tg_photo(tg_token, tg_chat, "",
+                              f"❌ 登录失败\n账号: {mask_email(email)}\n\nWispbyte Auto Restart")
                 return
 
             servers = get_servers(sb)
             if not servers:
-                msg = f"❌ 未找到服务器\n账号: {mask_email(email)}\n\nWispbyte Auto Restart"
-                send_tg_message(tg_token, tg_chat, msg)
+                send_tg_photo(tg_token, tg_chat, "",
+                              f"❌ 未找到服务器\n账号: {mask_email(email)}\n\nWispbyte Auto Restart")
                 return
 
             for si, server_id in enumerate(servers, start=1):
                 success = restart_server(sb, server_id)
                 status_icon = "✅" if success else "❌"
                 status_text = "重启成功" if success else "重启失败"
-                msg = (
+                caption = (
                     f"{status_icon} {status_text}\n\n"
                     f"账号: {mask_email(email)}\n"
                     f"服务器: {server_id}\n\n"
                     f"Wispbyte Auto Restart"
                 )
-                send_tg_message(tg_token, tg_chat, msg)
+                send_tg_photo(tg_token, tg_chat, "", caption)
 
         except Exception as e:
             log(f"账号 {idx} 处理异常: {e}", "ERROR")
-            msg = f"❌ 脚本异常\n账号: {mask_email(email)}\n信息: {str(e)[:200]}\n\nWispbyte Auto Restart"
-            send_tg_message(tg_token, tg_chat, msg)
+            send_tg_photo(tg_token, tg_chat, "",
+                          f"❌ 脚本异常\n账号: {mask_email(email)}\n信息: {str(e)[:200]}\n\nWispbyte Auto Restart")
 
 
 # ====================== 账号加载 ======================
