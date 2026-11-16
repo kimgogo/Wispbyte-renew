@@ -61,17 +61,9 @@ jobs:
           INPUT_ACCOUNTS: ${{ inputs.accounts }}
         run: python -u scripts/main.py
 
-#      - name: 上传截图
-#        if: always()
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: wispbyte-screenshots-${{ github.run_number }}
-#          path: output/screenshots/*.png
-#          retention-days: 7
-#          if-no-files-found: ignore
-
-      # 更新时间到time.txt,避免6个月未更新导致工作流暂停
+      # 更新时间到 time.txt，防止仓库长时间无活动导致定时工作流被暂停
       - name: 🕒 更新时间
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -81,7 +73,7 @@ jobs:
             echo "No need to commit"
           else
             git commit -m "⏱️ Auto Update by Github Actions $(TZ=Asia/Shanghai date +'%Y-%m-%d %H:%M:%S')"
-            git push origin main
+            git push origin HEAD:${{ github.ref_name }}
           fi
 
       - name: 清理历史运行记录
